@@ -1,4 +1,3 @@
-from __future__ import print_function, division, absolute_import
 import numpy as np
 from collections import namedtuple
 
@@ -45,10 +44,9 @@ def str2clause(s):
         body = [str2atom(s) for s in body_strs]
         clause = Clause(head, body)
         var_strs = set()
-        for atom in body+[head]:
-            print(atom)
         for strs in [var_string(atom) for atom in body+[head]]:
             var_strs = var_strs.union(strs)
+        var_strs = sorted(list(var_strs))
         return clause.replace_by_dict({s: i for i,s in enumerate(var_strs)})
     else:
         return Clause(head, [])

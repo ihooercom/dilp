@@ -25,31 +25,41 @@ def seq2seq_predict_on_instances_by_model(model, instances, batch_size, with_tar
 
 
 def compute_metric(instances, outputs):
-    corr_cnt = 0
+    metric = {"unmoveable": [0, 0], "moveable": [0, 0], "all": [0, 0]}
     for instance, output in zip(instances, outputs):
-        tgt = instance.fields['meta_data']['next_ob'][0]
+        src = instance.fields['meta_data']['ob'][0]
+        tgt_ori = instance.fields['meta_data']['next_ob'][0]
+        tgt = instance.fields['meta_data']['next_ob_trans'][0]
+        if src == tgt_ori:
+            c = "unmoveable"
+        else:
+            c = "moveable"
         pred = ' '.join(sorted(list(output['predicted_tokens'].keys())))
         if pred == tgt:
-            corr_cnt += 1
+            metric[c][0] += 1
+            metric[c][1] += 1
         else:
-            pass
+            metric[c][1] += 1
             # print('*' * 100)
             # print(tgt)
             # print(pred)
-    acc = corr_cnt / len(instances)
-    return acc
+    metric["all"][0] = metric["unmoveable"][0] + metric["moveable"][0]
+    metric["all"][1] = metric["unmoveable"][1] + metric["moveable"][1]
+    accs = {k: v[0] / max(v[1], 1) for k, v in metric.items()}
+    return accs
 
 
 if __name__ == "__main__":
     serialization_dir = 'exps/block_world/pt'
-    predictor = load_predictor_from_model_name("model_state_e20_b0.th", serialization_dir, cuda_device=0)
+    predictor = load_predictor_from_model_name("model_state_e10_b0.th", serialization_dir, cuda_device=0)
 
-    for n_blocks in range(4, 10):
+    for n_blocks in [4]:
         validation_data_path = f'data/block_world_n{n_blocks}/data.json'
         predictor._dataset_reader = TransitionDatasetReader(n_blocks=n_blocks)
         predictor._model.init(n_blocks=n_blocks)
+        predictor._model.thresh = 0.5
 
         instances = list(predictor._dataset_reader.read(validation_data_path))
         outputs = seq2seq_predict_on_instances_by_model(predictor._model, instances, batch_size=256)
-        acc = compute_metric(instances, outputs)
-        print(f'n_blocks: {n_blocks}, acc: ', acc)
+        accs = compute_metric(instances, outputs)
+        print(f'n_blocks: {n_blocks}, acc: ', accs)

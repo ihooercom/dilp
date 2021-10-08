@@ -1,9 +1,8 @@
-from __future__ import print_function, division, absolute_import
 import numpy as np
 from itertools import product
 from core.ilp import *
 from core.clause import *
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 from tqdm import tqdm
 import torch
 import json
@@ -14,9 +13,16 @@ try:
 except Exception:
     from itertools import zip_longest as izip_longest
 
+rule_template_cache = {}
 
 class RulesManager():
-    def __init__(self, n_blocks, language_frame, program_template, num_atoms_in_clause_body=2, has_neg_in_clause=False, save_dir=""):
+    def __init__(self,
+                 n_blocks,
+                 language_frame,
+                 program_template,
+                 num_atoms_in_clause_body=2,
+                 has_neg_in_clause=False,
+                 save_dir=""):
         self.__language = language_frame
         self.program_template = program_template
         self.num_atoms_in_clause_body = num_atoms_in_clause_body
@@ -44,20 +50,27 @@ class RulesManager():
                     'all_clauses': self.all_clauses,
                     'deduction_matrices': self.deduction_matrices
                 }, save_path)
-            # data = {}
-            # for p, p_clauses_list in self.all_clauses.items():
-            #     data[p.name] = []
-            #     for p_clauses in p_clauses_list:
-            #         data[p.name].append([str(c) for c in p_clauses])
-            # with open(path, 'w') as f:
-            #     json.dump(data, f, indent=4)
+            data = OrderedDict()
+            for p, p_clauses_list in self.all_clauses.items():
+                data[p.name] = []
+                for p_clauses in p_clauses_list:
+                    data[p.name].append([str(c) for c in p_clauses])
+            with open(save_path.replace('.th', '.json'), 'w') as f:
+                json.dump(data, f, indent=4)
 
     def __init_all_clauses(self):
         intensionals = self.__language.target + self.program_template.auxiliary
         for intensional in intensionals:
             for i in range(len(self.program_template.rule_temps[intensional])):
-                self.all_clauses[intensional].append(
-                    self.generate_clauses(intensional, self.program_template.rule_temps[intensional][i]))
+                print(f'generate {intensional} rules from {i}th rule template')
+                rule_template = self.program_template.rule_temps[intensional][i]
+                k = (intensional.arity, rule_template.variables_n, rule_template.allow_intensional)
+                if k in rule_template_cache:
+                    clauses = [Clause(Atom(intensional, c.head.terms), c.body) for c in rule_template_cache[k]]
+                else:
+                    clauses = self.generate_clauses(intensional, rule_template)
+                    rule_template_cache[k] = clauses
+                self.all_clauses[intensional].append(clauses)
 
     def __init_deduction_matrices(self):
         for intensional, clauses in self.all_clauses.items():
