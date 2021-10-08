@@ -77,18 +77,23 @@ def setup_blockworld(n_blocks=4):
 
 def check():
     mans = []
-    n_blocks_list = [4, 5]
+    n_blocks_list = [4]
     for n_blocks in n_blocks_list:
         mans.append(setup_blockworld(n_blocks=n_blocks)[0])
-    intensionals = list(mans[0].all_clauses.keys())
-    intensionals2 = list(mans[1].all_clauses.keys())
-    assert intensionals == intensionals2
     for i, n_blocks in enumerate(n_blocks_list):
         print(f'all grounds num when n_blocks={n_blocks}: ', len(mans[i].all_grounds))
+    intensionals = list(mans[0].all_clauses.keys())
     for intensional in intensionals:
         for i in range(len(mans[0].program_template.rule_temps[intensional])):
             rules_list = [mans[j].all_clauses[intensional][i] for j in range(len(n_blocks_list))]
             print(intensional.name, "rules num: ", len(rules_list[0]))
+
+    # check
+    intensionals2 = list(mans[1].all_clauses.keys())
+    assert intensionals == intensionals2
+    for intensional in intensionals:
+        for i in range(len(mans[0].program_template.rule_temps[intensional])):
+            rules_list = [mans[j].all_clauses[intensional][i] for j in range(len(n_blocks_list))]
             for j in range(1, len(n_blocks_list)):
                 assert rules_list[0] == rules_list[j]
 

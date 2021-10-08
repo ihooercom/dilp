@@ -80,6 +80,24 @@ class RulesManager():
                     row_matrices.append(self.generate_induction_matrix(clause))
                 self.deduction_matrices[intensional].append(row_matrices)
 
+    def str2rule(self, rule_str):
+        rule_dict = defaultdict(list)
+        plist = OrderedSet()
+        for s in rule_str.strip().split('\n'):
+            c = str2clause(s)
+            plist.add(c.head.predicate)
+            rule_dict[c.head.predicate].append(c)
+        rule = [tuple(rule_dict[p]) for p in plist]
+        return rule
+
+    def rule2str(self, rule):
+        lst = []
+        for p_rule in rule:
+            for c in p_rule:
+                lst.append(str(c))
+        rule_str = '\n'.join(lst)
+        return rule_str
+ 
     def generate_clauses(self, intensional, rule_template):
         base_variable = tuple(range(intensional.arity))
         head = (Atom(intensional, base_variable), )
@@ -127,6 +145,65 @@ class RulesManager():
         X = np.empty(find_shape(satisfy), dtype=np.int32)
         fill_array(X, satisfy)
         return X
+
+    def deduce_true_grounds_by_rule(self, rule, true_grounds):
+        for p_rule in rule:
+            for c in p_rule:
+                if c.head.predicate.name.startswith('invented'):
+                    true_head_atoms = self.find_satisfy_by_true_grounds(c, true_grounds)
+                    true_grounds.update(true_head_atoms)
+        deduced_true_grounds = set([])
+        for p_rule in rule:
+            for c in p_rule:
+                if not c.head.predicate.name.startswith('invented'):
+                    true_head_atoms = self.find_satisfy_by_true_grounds(c, true_grounds)
+                    deduced_true_grounds.update(true_head_atoms)
+        return deduced_true_grounds
+
+    def find_satisfy_by_true_grounds(self, clause, true_grounds):
+        free_body = clause.body
+        free_variables = list(set({}).union(*[x.variables for x in free_body]))
+        repeat_constatns = [self.__language.constants for _ in free_variables]
+        all_constants_combination = product(*repeat_constatns)
+        all_match = []
+        for combination in all_constants_combination:
+            all_match.append({free_variables[i]: constant for i, constant in enumerate(combination)})
+        satisfy_head_atoms = set([])
+        body_atom_val = {}
+        for match in all_match:
+            head_atom = clause.head.replace_terms(match)
+            if head_atom in satisfy_head_atoms:
+                continue
+            clause_is_true = True
+            for free_body_atom in free_body:
+                body_atom = free_body_atom.replace_terms(match)
+                if body_atom in body_atom_val:
+                    if body_atom_val[body_atom]:
+                        continue
+                    else:
+                        clause_is_true = False
+                        break
+                if body_atom.predicate.name.startswith("~"):
+                    p = Predicate(body_atom.predicate.name[1:], body_atom.predicate.arity)
+                    pos_atom = Atom(p, body_atom.terms)
+                    if pos_atom in true_grounds:
+                        body_atom_val[body_atom] = False
+                        clause_is_true = False
+                        break
+                    else:
+                        body_atom_val[body_atom] = True
+                else:
+                    if body_atom not in true_grounds:
+                        body_atom_val[body_atom] = False
+                        clause_is_true = False
+                        break
+                    else:
+                        body_atom_val[body_atom] = True
+
+            if clause_is_true:
+                satisfy_head_atoms.add(head_atom)
+        return satisfy_head_atoms
+
 
     def find_satisfy_by_head(self, clause, head):
         '''
